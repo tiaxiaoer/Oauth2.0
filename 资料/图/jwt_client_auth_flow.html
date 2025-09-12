@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT客户端认证流程 - 方法执行顺序</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.4.0/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .mermaid {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .description {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-left: 4px solid #4CAF50;
+            margin: 20px 0;
+        }
+        h2 {
+            color: #4CAF50;
+            margin-top: 30px;
+        }
+        code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #f1f1f1;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        .legend {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+        }
+        .legend-item {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JWT客户端认证流程 - 方法执行顺序</h1>
+        
+        <div class="description">
+            <p>下图展示了Keycloak中JWT客户端认证流程中四个核心方法的执行顺序：<code>readJws</code>、<code>validateClient</code>、<code>validateTokenAudience</code>和<code>validateToken</code>。这些方法在<code>JWTClientValidator</code>类中定义，并由<code>JWTClientAuthenticator</code>和<code>JWTClientSecretAuthenticator</code>调用。</p>
+        </div>
+        
+        <div class="mermaid">
+            graph TD
+                A[开始认证流程]
+                B[clientAssertion参数验证]
+                C[readJws
+读取并解析JWS]
+                D{readJws成功?}
+                E[validateClient
+验证客户端身份]
+                F{validateClient成功?}
+                G[验证签名算法]
+                H{签名算法验证成功?}
+                I[验证JWT签名]
+                J{签名验证成功?}
+                K[validateTokenAudience
+验证令牌受众]
+                L{受众验证成功?}
+                M[validateToken
+验证令牌有效性]
+                N{令牌验证成功?}
+                O[验证令牌重用]
+                P{令牌重用验证成功?}
+                Q[认证成功]
+                R[认证失败]
+                
+                A --> B
+                B --> C
+                C --> D
+                D -- 是 --> E
+                D -- 否 --> R
+                E --> F
+                F -- 是 --> G
+                F -- 否 --> R
+                G --> H
+                H -- 是 --> I
+                H -- 否 --> R
+                I --> J
+                J -- 是 --> K
+                J -- 否 --> R
+                K --> L
+                L -- 是 --> M
+                L -- 否 --> R
+                M --> N
+                N -- 是 --> O
+                N -- 否 --> R
+                O --> P
+                P -- 是 --> Q
+                P -- 否 --> R
+        </div>
+        
+        <div class="legend">
+            <h2>图例说明</h2>
+            <div class="legend-item">
+                <strong>readJws</strong>：读取客户端提供的JWT断言，并解析为JsonWebToken对象
+            </div>
+            <div class="legend-item">
+                <strong>validateClient</strong>：验证客户端身份，检查client_id是否有效且已启用
+            </div>
+            <div class="legend-item">
+                <strong>validateTokenAudience</strong>：验证令牌的受众声明，确保与当前Keycloak服务器匹配
+            </div>
+            <div class="legend-item">
+                <strong>validateToken</strong>：验证令牌的基本有效性，包括检查令牌是否过期、是否在未来签发等
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</body>
+</html>

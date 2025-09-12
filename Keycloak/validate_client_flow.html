@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWTClientValidator.validateClient() 方法流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.4.0/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .mermaid {
+            margin: 30px 0;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            border: 1px solid #ddd;
+        }
+        .code-section {
+            margin-top: 40px;
+        }
+        .description {
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        .legend {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .legend-item {
+            margin: 5px 0;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        .success-color { background-color: #d4edda; }
+        .failure-color { background-color: #f8d7da; }
+        .check-color { background-color: #fff3cd; }
+    </style>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                curve: 'linear',
+                nodeSpacing: 20,
+                rankSpacing: 30
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>JWTClientValidator.validateClient() 方法流程图</h1>
+        
+        <div class="description">
+            <p>该流程图展示了 Keycloak 中 <code>JWTClientValidator</code> 类的 <code>validateClient()</code> 方法的执行流程。此方法用于验证 JWT 客户端认证中的客户端身份和配置。</p>
+        </div>
+        
+        <div class="mermaid">
+            flowchart TD
+                A[开始 validateClient] --> B{检查 token 是否为 null}
+                B -- 是 --> C[抛出 IllegalStateException 异常]
+                B -- 否 --> D[从 token 获取 clientId]
+                D --> E{检查 clientId 是否为 null}
+                E -- 是 --> F[抛出 RuntimeException 异常]
+                E -- 否 --> G{检查 issuer 与 subject 是否匹配}
+                G -- 否 --> H[抛出 RuntimeException 异常]
+                G -- 是 --> I[获取请求参数中的 client_id]
+                I --> J{检查请求中的 client_id 是否存在且与 token 中的 clientId 不匹配}
+                J -- 是 --> K[抛出 RuntimeException 异常]
+                J -- 否 --> L[在事件中设置 clientId]
+                L --> M[根据 clientId 查找 ClientModel]
+                M --> N{ClientModel 是否存在}
+                N -- 否 --> O[设置 CLIENT_NOT_FOUND 失败状态并返回 false]
+                N -- 是 --> P[将 ClientModel 设置到上下文中]
+                P --> Q{客户端是否已启用}
+                Q -- 否 --> R[设置 CLIENT_DISABLED 失败状态并返回 false]
+                Q -- 是 --> S{客户端认证器类型是否匹配}
+                S -- 否 --> T[设置 INVALID_CLIENT_CREDENTIALS 失败状态并返回 false]
+                S -- 是 --> U[返回 true]
+                C --> V[验证失败]
+                F --> V
+                H --> V
+                K --> V
+                O --> V
+                R --> V
+                T --> V
+                U --> W[验证成功]
+        </div>
+        
+        <div class="code-section">
+            <h2>validateClient() 方法源代码</h2>
+            <pre>
+public boolean validateClient() {
+    if (token == null) throw new IllegalStateException("Incorrect usage. Variable 'token' is null. Need to read JWS first before validateClient");
+
+    String clientId = token.getSubject();
+    if (clientId == null) {
+        throw new RuntimeException("Can't identify client. Subject missing on JWT token");
+    }
+
+    if (!clientId.equals(token.getIssuer())) {
+        throw new RuntimeException("Issuer mismatch. The issuer should match the subject");
+    }
+
+    String clientIdParam = params.getFirst(OAuth2Constants.CLIENT_ID);
+    if (clientIdParam != null && !clientIdParam.equals(clientId)) {
+        throw new RuntimeException("client_id parameter not matching with client from JWT token");
+    }
+
+    context.getEvent().client(clientId);
+    client = realm.getClientByClientId(clientId);
+    if (client == null) {
+        context.failure(AuthenticationFlowError.CLIENT_NOT_FOUND, null);
+        return false;
+    } else {
+        context.setClient(client);
+    }
+
+    if (!client.isEnabled()) {
+        context.failure(AuthenticationFlowError.CLIENT_DISABLED, null);
+        return false;
+    }
+
+    if (!clientAuthenticatorProviderId.equals(client.getClientAuthenticatorType())) {
+        context.failure(AuthenticationFlowError.INVALID_CLIENT_CREDENTIALS, null);
+        return false;
+    }
+
+    return true;
+}</pre>
+        </div>
+        
+        <div class="legend">
+            <h3>图例说明</h3>
+            <div class="legend-item"><span class="legend-color check-color"></span> 检查条件</div>
+            <div class="legend-item"><span class="legend-color failure-color"></span> 验证失败路径</div>
+            <div class="legend-item"><span class="legend-color success-color"></span> 验证成功路径</div>
+        </div>
+    </div>
+</body>
+</html>

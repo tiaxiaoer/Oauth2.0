@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keycloak JWT客户端认证流程</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.4.0/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .mermaid {
+            margin: 20px 0;
+        }
+        .method-details {
+            background-color: #f9f9f9;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007acc;
+            border-radius: 4px;
+        }
+        h3 {
+            color: #007acc;
+            margin-top: 0;
+        }
+        code {
+            background-color: #eee;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .flow-description {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e6f3ff;
+            border-radius: 4px;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+        .legend-item {
+            margin: 5px 0;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Keycloak JWT客户端认证流程</h1>
+        
+        <div class="flow-description">
+            <p>以下流程图展示了Keycloak中JWT客户端认证的关键验证步骤，包括<code>readJws</code>、<code>validateClient</code>、<code>validateTokenAudience</code>和<code>validateToken</code>方法的顺序执行过程。</p>
+        </div>
+        
+        <div class="mermaid">
+            flowchart TD
+                A[开始] --> B[创建JWTClientValidator实例]
+                B --> C{clientAssertionParametersValidation}
+                C -- 成功 --> D[readJws]
+                C -- 失败 --> Z[认证失败]
+                
+                D --> E{validateClient}
+                E -- 成功 --> F[validateTokenAudience]
+                E -- 失败 --> Z
+                
+                F --> G{validateToken}
+                G -- 成功 --> H[继续后续验证]
+                G -- 失败 --> Z
+                
+                H --> I[认证成功]
+                Z --> J[结束]
+                I --> J
+                
+                subgraph readJws方法
+                    D1[检查clientAssertion非空]
+                    D2[创建JWSInput对象]
+                    D3[解析JsonWebToken对象]
+                    D --> D1
+                    D1 --> D2
+                    D2 --> D3
+                end
+                
+                subgraph validateClient方法
+                    E1[检查token非空]
+                    E2[验证客户端ID]
+                    E3[检查Issuer与Subject匹配]
+                    E4[验证client_id参数]
+                    E5[查找并验证客户端]
+                    E --> E1
+                    E1 --> E2
+                    E2 --> E3
+                    E3 --> E4
+                    E4 --> E5
+                end
+                
+                subgraph validateTokenAudience方法
+                    F1[获取预期受众列表]
+                    F2[验证令牌受众匹配]
+                    F3[检查多受众配置]
+                    F --> F1
+                    F1 --> F2
+                    F2 --> F3
+                end
+                
+                subgraph validateToken方法
+                    G1[检查token非空]
+                    G2[验证令牌活性]
+                    G3[检查必需时间声明]
+                    G4[处理时钟偏差]
+                    G5[验证令牌ID存在]
+                    G --> G1
+                    G1 --> G2
+                    G2 --> G3
+                    G3 --> G4
+                    G4 --> G5
+                end
+        </div>
+        
+        <div class="method-details">
+            <h3>readJws方法</h3>
+            <p>读取和解析JWT客户端断言</p>
+            <pre><code>public void readJws() throws JWSInputException {
+    if (clientAssertion == null) throw new IllegalStateException("Incorrect usage. Variable 'clientAssertion' is null. Need to validate clientAssertion first before read JWS");
+
+    jws = new JWSInput(clientAssertion);
+    token = jws.readJsonContent(JsonWebToken.class);
+}</code></pre>
+            <p><strong>功能</strong>：将客户端提供的JWT断言字符串解析为JWSInput对象和JsonWebToken对象，为后续验证做准备。</p>
+        </div>
+        
+        <div class="method-details">
+            <h3>validateClient方法</h3>
+            <p>验证客户端身份和配置</p>
+            <pre><code>public boolean validateClient() {
+    if (token == null) throw new IllegalStateException("Incorrect usage. Variable 'token' is null. Need to read JWS first before validateClient");
+
+    String clientId = token.getSubject();
+    if (clientId == null) {
+        throw new RuntimeException("Can't identify client. Subject missing on JWT token");
+    }
+
+    if (!clientId.equals(token.getIssuer())) {
+        throw new RuntimeException("Issuer mismatch. The issuer should match the subject");
+    }
+
+    String clientIdParam = params.getFirst(OAuth2Constants.CLIENT_ID);
+    if (clientIdParam != null && !clientIdParam.equals(clientId)) {
+        throw new RuntimeException("client_id parameter not matching with client from JWT token");
+    }
+
+    context.getEvent().client(clientId);
+    client = realm.getClientByClientId(clientId);
+    if (client == null) {
+        context.failure(AuthenticationFlowError.CLIENT_NOT_FOUND, null);
+        return false;
+    } else {
+        context.setClient(client);
+    }
+
+    if (!client.isEnabled()) {
+        context.failure(AuthenticationFlowError.CLIENT_DISABLED, null);
+        return false;
+    }
+
+    if (!clientAuthenticatorProviderId.equals(client.getClientAuthenticatorType())) {
+        context.failure(AuthenticationFlowError.INVALID_CLIENT_CREDENTIALS, null);
+        return false;
+    }
+
+    return true;
+}</code></pre>
+            <p><strong>功能</strong>：验证JWT中的客户端标识，检查客户端是否存在、是否启用，以及是否配置了正确的认证器类型。</p>
+        </div>
+        
+        <div class="method-details">
+            <h3>validateTokenAudience方法</h3>
+            <p>验证令牌的受众声明</p>
+            <pre><code>public void validateTokenAudience(ClientAuthenticationFlowContext context, RealmModel realm, JsonWebToken token) {
+    List<String> expectedAudiences = getExpectedAudiences(context, realm);
+    if (!token.hasAnyAudience(expectedAudiences)) {
+        throw new RuntimeException("Token audience doesn't match domain. Expected audiences are any of " + expectedAudiences
+                + " but audience from token is '" + Arrays.asList(token.getAudience()) + "'");
+    }
+
+    if (!isAllowMultipleAudiencesForJwtClientAuthentication(context) && token.getAudience().length > 1) {
+        throw new RuntimeException("Multiple audiences not allowed in the JWT token for client authentication");
+    }
+}</code></pre>
+            <p><strong>功能</strong>：确保令牌的受众声明包含Keycloak服务器的相关端点URL，并根据配置检查是否允许多个受众。</p>
+        </div>
+        
+        <div class="method-details">
+            <h3>validateToken方法</h3>
+            <p>验证令牌的基本有效性</p>
+            <pre><code>public void validateToken() {
+    if (token == null) throw new IllegalStateException("Incorrect usage. Variable 'token' is null. Need to read token first before validateToken");
+
+    if (!token.isActive(ALLOWED_CLOCK_SKEW)) {
+        throw new RuntimeException("Token is not active");
+    }
+
+    if ((token.getExp() == null || token.getExp() <= 0) && (token.getIat() == null || token.getIat() <= 0)) {
+        throw new RuntimeException("Token cannot be validated. Neither the exp nor the iat claim are present.");
+    }
+
+    // KEYCLOAK-2986, token-timeout or token-expiration in keycloak.json might not be used
+    if (token.getExp() == null || token.getExp() <= 0) { // in case of "exp" not exist
+        if (token.getIat() + ALLOWED_CLOCK_SKEW + 10 < currentTime) { // consider "exp" = 10, client's clock delays from Keycloak's clock
+            throw new RuntimeException("Token is not active");
+        }
+    } else {
+        if ((token.getIat() != null && token.getIat() > 0) && token.getIat() - ALLOWED_CLOCK_SKEW > currentTime) { // consider client's clock is ahead from Keycloak's clock
+            throw new RuntimeException("Token was issued in the future");
+        }
+    }
+
+    if (token.getId() == null) {
+        throw new RuntimeException("Missing ID on the token");
+    }
+}</code></pre>
+            <p><strong>功能</strong>：验证令牌的活性、必需的时间声明（exp和iat）、处理时钟偏差情况，并确保令牌ID存在。</p>
+        </div>
+        
+        <div class="legend">
+            <h3>图例说明</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #d1ecf1;"></div>
+                <span>方法执行流程</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #c3e6cb;"></div>
+                <span>成功路径</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #f8d7da;"></div>
+                <span>失败路径</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>
