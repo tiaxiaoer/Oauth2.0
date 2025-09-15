@@ -1,3 +1,6 @@
 [submodule "Hydra"]
 	path = Hydra
 	url = https://github.com/ory/hydra.git
+[submodule "fosite"]
+	path = fosite
+	url = https://github.com/ory/fosite.git
