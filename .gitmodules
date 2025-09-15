@@ -1,0 +1,3 @@
+[submodule "Hydra"]
+	path = Hydra
+	url = https://github.com/ory/hydra.git
